@@ -1,0 +1,24 @@
+# Maven build output — never commit compiled classes
+backend/target/
+*.class
+*.jar
+*.war
+
+# Local secrets — never commit
+.env
+*.env
+application-local.yml
+application-local.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploaded files
+backend/uploads/
