@@ -1,26 +1,37 @@
 package com.wha.service;
 
-import jakarta.mail.internet.MimeMessage;
-import lombok.RequiredArgsConstructor;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class EmailService {
 
-    private final JavaMailSender mailSender;
+    @Value("${app.brevo.api-key}")
+    private String brevoApiKey;
 
     @Value("${app.mail.from}")
     private String fromAddress;
 
     @Value("${app.frontend-url}")
     private String frontendUrl;
+
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Async
     public void sendVerificationEmail(String toEmail, String firstName, String token) {
@@ -29,14 +40,31 @@ public class EmailService {
 
         log.info("Sending verification email to {} | link: {}", toEmail, link);
         try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-            helper.setFrom(fromAddress);
-            helper.setTo(toEmail);
-            helper.setSubject("Verify your Northlight Horizon account");
-            helper.setText(html, true);
-            mailSender.send(message);
-            log.info("Verification email sent to {}", toEmail);
+            Map<String, Object> body = Map.of(
+                "sender", Map.of("name", "Northlight Horizon", "email", fromAddress),
+                "to", List.of(Map.of("email", toEmail, "name", firstName)),
+                "subject", "Verify your Northlight Horizon account",
+                "htmlContent", html
+            );
+
+            String jsonBody = MAPPER.writeValueAsString(body);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.brevo.com/v3/smtp/email"))
+                    .timeout(Duration.ofSeconds(15))
+                    .header("accept", "application/json")
+                    .header("content-type", "application/json")
+                    .header("api-key", brevoApiKey)
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .build();
+
+            HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                log.info("Verification email sent to {} via Brevo (status {})", toEmail, response.statusCode());
+            } else {
+                log.error("Brevo rejected email to {}: status={} body={}", toEmail, response.statusCode(), response.body());
+            }
         } catch (Exception e) {
             log.error("Failed to send verification email to {}: {}", toEmail, e.getMessage(), e);
         }
