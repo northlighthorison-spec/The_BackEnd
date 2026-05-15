@@ -1,12 +1,15 @@
 package com.wha.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wha.exception.AppException;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestTemplate;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.Map;
 
 @Service
@@ -15,19 +18,31 @@ public class GoogleOAuthService {
     @Value("${spring.security.oauth2.client.registration.google.client-id}")
     private String clientId;
 
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     public record GoogleUserInfo(String email, String firstName, String lastName, String googleId) {}
 
     public GoogleUserInfo verifyIdToken(String idToken) {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(5000);
-        factory.setReadTimeout(8000);
-        RestTemplate rest = new RestTemplate(factory);
         try {
-            Map<?, ?> payload = rest.getForObject(
-                    "https://oauth2.googleapis.com/tokeninfo?id_token=" + idToken,
-                    Map.class);
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://oauth2.googleapis.com/tokeninfo?id_token=" + idToken))
+                    .timeout(Duration.ofSeconds(8))
+                    .GET()
+                    .build();
 
-            if (payload == null || payload.containsKey("error_description")) {
+            HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() != 200) {
+                throw AppException.unauthorized("Invalid Google token");
+            }
+
+            Map<?, ?> payload = MAPPER.readValue(response.body(), Map.class);
+
+            if (payload.containsKey("error_description")) {
                 throw AppException.unauthorized("Invalid Google token");
             }
 
@@ -50,7 +65,7 @@ public class GoogleOAuthService {
             );
         } catch (AppException e) {
             throw e;
-        } catch (RestClientException e) {
+        } catch (Exception e) {
             throw AppException.unauthorized("Could not verify Google token: " + e.getMessage());
         }
     }
