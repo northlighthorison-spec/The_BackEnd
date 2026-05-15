@@ -2,6 +2,7 @@ package com.wha.service;
 
 import com.wha.exception.AppException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
@@ -17,7 +18,10 @@ public class GoogleOAuthService {
     public record GoogleUserInfo(String email, String firstName, String lastName, String googleId) {}
 
     public GoogleUserInfo verifyIdToken(String idToken) {
-        RestTemplate rest = new RestTemplate();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5000);
+        factory.setReadTimeout(8000);
+        RestTemplate rest = new RestTemplate(factory);
         try {
             Map<?, ?> payload = rest.getForObject(
                     "https://oauth2.googleapis.com/tokeninfo?id_token=" + idToken,
@@ -47,7 +51,7 @@ public class GoogleOAuthService {
         } catch (AppException e) {
             throw e;
         } catch (RestClientException e) {
-            throw AppException.unauthorized("Could not verify Google token");
+            throw AppException.unauthorized("Could not verify Google token: " + e.getMessage());
         }
     }
 }
