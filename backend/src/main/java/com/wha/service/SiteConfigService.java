@@ -43,7 +43,9 @@ public class SiteConfigService {
             .label("Donate CTA headline").type("text").build(),
         SiteConfig.builder().key("donate_cta_body")
             .value("Donations go straight to operations. No large administrative overhead, no celebrity spokespeople — just the work.")
-            .label("Donate CTA body text").type("textarea").build()
+            .label("Donate CTA body text").type("textarea").build(),
+        SiteConfig.builder().key("contact_phone").value("")
+            .label("Contact phone number").type("text").build()
     );
 
     public Map<String, String> getAllAsMap() {
